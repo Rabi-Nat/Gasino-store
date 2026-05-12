@@ -1,0 +1,10 @@
+{
+  "name": "Gasino-v2",
+  "short_name": "Gasino",
+  "description": "ابزار محاسبات مهندسی گاز ",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "theme_color": "#2563eb",
+  "background_color": "#f8fafc",
+  "requestFramePermissions": ["web-share"]
+}

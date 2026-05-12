@@ -1,0 +1,76 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Vazirmatn", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+}
+
+@layer base {
+  body {
+    -webkit-tap-highlight-color: transparent;
+    @apply bg-slate-50 text-slate-900 overflow-hidden;
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    background: white !important;
+    overflow: visible !important;
+  }
+}
+
+@layer components {
+  .tab-content {
+    @apply hidden h-full overflow-y-auto;
+  }
+  
+  .tab-content.active {
+    @apply block;
+    animation: fadeIn 0.4s ease-out;
+  }
+
+  .sidebar-btn.active {
+    @apply bg-blue-600 text-white shadow-lg shadow-blue-100;
+    transform: scale(1.02);
+  }
+
+  .nav-btn.active {
+    @apply text-blue-600;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #e2e8f0;
+    border-radius: 10px;
+  }
+
+  .ltr {
+    direction: ltr;
+    text-align: left;
+  }
+
+  .page-enter {
+    animation: fadeIn 0.4s ease-out;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes loading-bar {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}

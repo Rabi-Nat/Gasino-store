@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { 
   ShoppingCart, 
   Plus, 
@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 
 interface Product {
   id: string;
@@ -359,8 +360,8 @@ export const Store: React.FC = () => {
   ];
 
   const cartTotalItems = cart.length;
-  const [isCapturing, setIsCapturing] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'info' } | null>(null);
 
   const showToast = (message: string, type: 'success' | 'info' = 'success') => {
@@ -372,12 +373,7 @@ export const Store: React.FC = () => {
   const [pendingAction, setPendingAction] = useState<'save' | 'share' | null>(null);
   const invoiceRef = useRef<HTMLDivElement>(null);
 
-  const handleActionWithInfo = (action: 'save' | 'share') => {
-    if (action === 'save') {
-      handleSaveImage();
-      return;
-    }
-
+  const handleActionWithInfo = (action: 'share') => {
     if (!senderInfo.name || !senderInfo.phone) {
       setPendingAction(action);
       setShowSenderForm(true);
@@ -415,129 +411,104 @@ export const Store: React.FC = () => {
     }
   };
 
-  const handleSaveImage = async () => {
-    if (!invoiceRef.current || isCapturing) return;
+  const handlePrint = async () => {
+    if (!invoiceRef.current || isGeneratingPDF) return;
     
-    setIsCapturing(true);
-    const element = invoiceRef.current;
+    setIsGeneratingPDF(true);
+    showToast('در حال تولید فایل PDF...', 'info');
     
     try {
-      // Small delay to ensure any layout changes are settled
+      const element = invoiceRef.current;
+      
+      // Small delay to ensure layout
       await new Promise(resolve => setTimeout(resolve, 300));
-
+      
       const canvas = await html2canvas(element, {
-        scale: 2,
+        scale: 2, // Balanced quality and performance
         useCORS: true,
-        allowTaint: true,
-        backgroundColor: '#ffffff',
         logging: false,
+        backgroundColor: '#ffffff',
         onclone: (clonedDoc) => {
-           const style = clonedDoc.createElement('style');
-           style.innerHTML = `
-             * { 
-               --color-blue-600: #2563eb !important;
-               --color-slate-900: #0f172a !important;
-               --color-slate-800: #1e293b !important;
-               --color-slate-700: #334155 !important;
-               --color-slate-600: #475569 !important;
-               --color-slate-500: #64748b !important;
-               --color-slate-400: #94a3b8 !important;
-               --color-slate-300: #cbd5e1 !important;
-               --color-slate-200: #e2e8f0 !important;
-               --color-slate-100: #f1f5f9 !important;
-               --color-slate-50: #f8fafc !important;
-               color-scheme: light !important;
-             }
-             .bg-blue-600 { background-color: #2563eb !important; }
-             .text-blue-600 { color: #2563eb !important; }
-             .text-slate-900 { color: #0f172a !important; }
-             .bg-white { background-color: #ffffff !important; }
-             .no-print { display: none !important; }
-           `;
-           clonedDoc.head.appendChild(style);
+          const el = clonedDoc.getElementById('invoice-capture-area');
+          if (el) {
+            el.style.boxShadow = 'none';
+            el.style.border = 'none';
+          }
+          
+          const style = clonedDoc.createElement('style');
+          style.innerHTML = `
+            * { color-scheme: light !important; -webkit-print-color-adjust: exact; }
+            .text-blue-600 { color: #2563eb !important; }
+            .bg-blue-600 { background-color: #2563eb !important; }
+            .text-white { color: #ffffff !important; }
+            .bg-white { background-color: #ffffff !important; }
+            .no-print { display: none !important; }
+          `;
+          clonedDoc.head.appendChild(style);
 
-           // Strip oklch/oklab which crashes html2canvas in some environments
-           const allElements = clonedDoc.querySelectorAll('*');
-           const defaultView = clonedDoc.defaultView || window;
-           
-           allElements.forEach(el => {
-              const htmlEl = el as HTMLElement;
-              const computed = defaultView.getComputedStyle(el);
-              const isBadColor = (val: string) => val && (val.includes('oklch') || val.includes('oklab'));
-
-              if (isBadColor(computed.color)) htmlEl.style.color = '#1e293b';
-              if (isBadColor(computed.backgroundColor)) htmlEl.style.backgroundColor = '#ffffff';
-              if (isBadColor(computed.borderColor)) htmlEl.style.borderColor = '#e2e8f0';
-              
-              if (htmlEl.style) {
-                const propsToRemove: string[] = [];
-                for (let i = 0; i < htmlEl.style.length; i++) {
-                  const prop = htmlEl.style[i];
-                  if (prop.startsWith('--') && isBadColor(htmlEl.style.getPropertyValue(prop))) {
-                    propsToRemove.push(prop);
-                  }
+          // Force-strip any oklch color references that crash html2canvas
+          const allElements = clonedDoc.querySelectorAll('*');
+          allElements.forEach(element => {
+            const htmlEl = element as HTMLElement;
+            
+            // 1. Remove inline styles
+            if (htmlEl.style) {
+              for (let i = 0; i < htmlEl.style.length; i++) {
+                const prop = htmlEl.style[i];
+                const value = htmlEl.style.getPropertyValue(prop);
+                if (value && (value.includes('oklch') || value.includes('oklab'))) {
+                   htmlEl.style.removeProperty(prop);
                 }
-                propsToRemove.forEach(p => htmlEl.style.removeProperty(p));
               }
-           });
+            }
+
+            // 2. Clean up common problematic attributes
+            ['color', 'background-color', 'border-color', 'fill', 'stroke'].forEach(attr => {
+               const val = window.getComputedStyle(element).getPropertyValue(attr);
+               if (val && (val.includes('oklch') || val.includes('oklab'))) {
+                 htmlEl.style.setProperty(attr, 'unset', 'important');
+               }
+            });
+          });
         }
       });
       
-      const image = canvas.toDataURL('image/png');
-      const filename = `pish-faktor-${new Date().getTime()}.png`;
-
-      // Optimized for Mobile/APK: Use Web Share API if available
-      const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
       
-      if (navigator.share && isMobile) {
-        try {
-          const byteString = atob(image.split(',')[1]);
-          const mimeString = image.split(',')[0].split(':')[1].split(';')[0];
-          const ab = new ArrayBuffer(byteString.length);
-          const ia = new Uint8Array(ab);
-          for (let i = 0; i < byteString.length; i++) {
-            ia[i] = byteString.charCodeAt(i);
-          }
-          const blob = new Blob([ab], { type: mimeString });
-          const file = new File([blob], filename, { type: 'image/png' });
-          
-          if (navigator.canShare && navigator.canShare({ files: [file] })) {
-            await navigator.share({
-              files: [file],
-              title: 'پیش فاکتور',
-            });
-            showToast('آماده اشتراک‌گذاری یا ذخیره در گالری');
-            return;
-          }
-        } catch (shareErr) {
-          console.log('Share failed, try download', shareErr);
-        }
-      }
-
-      // Standard Download Fallback (Works in Browsers)
-      const link = document.body.appendChild(document.createElement('a'));
-      link.href = image;
-      link.download = filename;
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      
+      pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+      
+      // Better download method for different environments
+      const blob = pdf.output('blob');
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `gasino-invoice-${new Date().getTime()}.pdf`;
+      document.body.appendChild(link);
       link.click();
-      setTimeout(() => document.body.removeChild(link), 300);
       
-      showToast('تصویر ایجاد شد. در گالری یا دانلودها ذخیره کنید.');
+      // Clean up
+      setTimeout(() => {
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      }, 100);
       
-    } catch (error: any) {
-      console.error('Error saving image:', error);
-      alert('خطا در ایجاد تصویر. لطفاً از گزینه "چاپ / ذخیره PDF" استفاده کنید که دقیق‌تر است.');
-    } finally {
-      setIsCapturing(false);
-    }
-  };
-
-  const handlePrint = () => {
-    showToast('در حال آماده‌سازی فایل چاپ/PDF...', 'info');
-    setTimeout(() => {
+      showToast('فایل PDF با موفقیت آماده و دانلود شد');
+    } catch (error) {
+      console.error('PDF Generation Error:', error);
+      // Final fallback
       window.print();
-      // Only show the success toast after the print dialog is closed
-      showToast('فایل پیش فاکتور در مسیر دانلودها ذخیره شد');
-    }, 500);
+    } finally {
+      setIsGeneratingPDF(false);
+    }
   };
 
   const handleTelegramInquiry = async (nameOverride?: string, phoneOverride?: string) => {
@@ -638,7 +609,7 @@ export const Store: React.FC = () => {
         showToast('استعلام شما با موفقیت ارسال شد. کارشناس فروش بزودی با شما تماس خواهد گرفت.');
       } else {
         alert(data.message || 'خطا در ارسال استعلام.');
-        handleNativeShare();
+        handlePrint();
       }
     } catch (error: any) {
       console.error('Error sending inquiry:', error);
@@ -648,44 +619,10 @@ export const Store: React.FC = () => {
     }
   };
 
-  const handleNativeShare = async () => {
-    if (!invoiceRef.current) return;
-    
-    // Check if Web Share API is available
-    if (navigator.share && window.isSecureContext) {
-      try {
-        const canvas = await html2canvas(invoiceRef.current, { scale: 2 });
-        canvas.toBlob(async (blob) => {
-          if (!blob) {
-            window.print();
-            return;
-          }
-          const file = new File([blob], 'invoice.png', { type: 'image/png' });
-          
-          try {
-            await navigator.share({
-              files: [file],
-              title: 'Gasino Invoice',
-              text: `پیش‌فاکتور ملزومات گاز\nنام: ${senderInfo.name}\nشماره تماس: ${senderInfo.phone}`
-            });
-          } catch (shareError) {
-             console.log('Share error, falling back back to print:', shareError);
-             window.print();
-          }
-        });
-      } catch (error) {
-        console.error('Error sharing:', error);
-        window.print();
-      }
-    } else {
-      window.print();
-    }
-  };
-
   if (showInvoiced) {
     return (
       <div className="max-w-3xl mx-auto animate-in fade-in zoom-in duration-300">
-        <div ref={invoiceRef} className="bg-white rounded-[2rem] shadow-xl overflow-hidden border border-slate-100">
+        <div id="invoice-capture-area" ref={invoiceRef} className="bg-white rounded-[2rem] shadow-xl overflow-hidden border border-slate-100">
           <div className="bg-blue-600 p-8 text-white flex justify-between items-center">
             <div>
               <h2 className="text-2xl font-black mb-1">پیش‌فاکتور ملزومات گاز</h2>
@@ -746,29 +683,23 @@ export const Store: React.FC = () => {
           </div>
         </div>
 
-        <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4 no-print px-4">
+        <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-4 no-print px-4">
             <button 
-                onClick={() => handleActionWithInfo('save')}
-                disabled={isCapturing}
-                className={`w-full ${isCapturing ? 'bg-slate-400' : 'bg-green-600 hover:bg-green-700'} text-white px-6 py-4 rounded-2xl font-black flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-green-100 disabled:cursor-not-allowed`}
+                type="button"
+                onClick={handlePrint}
+                disabled={isGeneratingPDF}
+                className={`w-full ${isGeneratingPDF ? 'bg-slate-400' : 'bg-blue-600 hover:bg-blue-700'} text-white px-6 py-4 rounded-2xl font-black flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-blue-100 disabled:cursor-not-allowed`}
             >
-              {isCapturing ? (
+              {isGeneratingPDF ? (
                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               ) : (
-                <Download className="w-5 h-5" />
+                <FileText className="w-5 h-5" />
               )}
-              {isCapturing ? 'در حال پردازش...' : 'ذخیره عکس'}
-            </button>
-
-            <button 
-                onClick={handlePrint}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white px-6 py-4 rounded-2xl font-black flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-blue-100"
-            >
-              <FileText className="w-5 h-5" />
-              چاپ / ذخیره PDF
+              {isGeneratingPDF ? 'در حال ایجاد...' : 'چاپ / ذخیره PDF'}
             </button>
             
             <button 
+                type="button"
                 onClick={() => handleActionWithInfo('share')}
                 disabled={isSending}
                 className={`w-full ${isSending ? 'bg-slate-400' : 'bg-slate-900 hover:bg-slate-800'} text-white px-6 py-4 rounded-2xl font-black flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-slate-100 disabled:cursor-not-allowed`}

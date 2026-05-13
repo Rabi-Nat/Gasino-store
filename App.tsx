@@ -64,7 +64,7 @@ const App: React.FC = () => {
   return (
     <div className="h-screen flex flex-col md:flex-row overflow-hidden text-slate-900 bg-slate-50 font-sans">
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex flex-col w-72 bg-white border-l border-slate-200 p-6 z-50">
+      <aside className="hidden md:flex flex-col w-72 bg-white border-l border-slate-200 p-6 z-50 no-print">
         <div className="flex items-center gap-3 mb-10">
           <div className="bg-blue-600 p-2.5 rounded-2xl shadow-lg shadow-blue-100">
             <Flame className="text-white w-6 h-6" />
@@ -100,7 +100,7 @@ const App: React.FC = () => {
       </aside>
 
       {/* Mobile Header */}
-      <header className="md:hidden h-16 bg-white border-b border-slate-200 flex items-center justify-between px-5 sticky top-0 z-40">
+      <header className="md:hidden h-16 bg-white border-b border-slate-200 flex items-center justify-between px-5 sticky top-0 z-40 no-print">
         <div className="flex items-center gap-3">
           <Flame className="text-blue-600 w-6 h-6" />
           <span className="font-black text-lg">{activeLabel}</span>
@@ -115,7 +115,7 @@ const App: React.FC = () => {
         </div>
 
         {/* Mobile Bottom Navigation */}
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-2 py-2 flex justify-between items-center z-40">
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-2 py-2 flex justify-between items-center z-40 no-print">
           <div className="flex w-full overflow-x-auto no-scrollbar gap-1">
             {tabs.map((tab) => (
               <button

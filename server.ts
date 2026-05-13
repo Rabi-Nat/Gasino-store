@@ -2,6 +2,10 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
+import dotenv from "dotenv";
+
+// Load environment variables from .env file for local development
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -43,9 +47,10 @@ async function startServer() {
       console.log(`[DEBUG] Attempting Telegram send. TOKEN_LEN: ${botToken?.length || 0}, CHAT_ID: ${chatId}`);
 
       if (!botToken || !chatId) {
+        console.error("[ERROR] Missing Telegram Credentials. Make sure TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID are set.");
         return res.json({ 
           success: false, 
-          message: "تنظیمات تلگرام (TOKEN یا CHAT_ID) در سرور یافت نشد. لطفاً در بخش Settings > Secrets این مقادیر را با نام دقیق TELEGRAM_BOT_TOKEN و TELEGRAM_CHAT_ID تعریف کنید." 
+          message: "تنظیمات تلگرام (TOKEN یا CHAT_ID) یافت نشد.\n\nراهنما:\n۱. اگر از گیت‌هاب استفاده می‌کنید، فایل .env.example را به .env تغییر نام داده و توکن‌ها را در آن قرار دهید.\n۲. اگر در هاست هستید، این مقادیر را در قسمت Environment Variables تعریف کنید.\n۳. سرور را ریستارت کنید." 
         });
       }
 

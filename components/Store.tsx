@@ -505,8 +505,10 @@ export const Store: React.FC = () => {
     });
 
     try {
-      // Use standard endpoint
-      const endpoint = '/api/inquiry';
+      // Use standard endpoint or absolute URL from env for mobile/android environments
+      const apiBase = import.meta.env.VITE_API_BASE_URL || '';
+      const endpoint = `${apiBase}/api/inquiry`;
+      
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 

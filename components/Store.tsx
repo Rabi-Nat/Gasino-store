@@ -373,28 +373,46 @@ export const Store: React.FC = () => {
   const invoiceRef = useRef<HTMLDivElement>(null);
 
   const handleActionWithInfo = (action: 'save' | 'share') => {
+    if (action === 'save') {
+      handleSaveImage();
+      return;
+    }
+
     if (!senderInfo.name || !senderInfo.phone) {
       setPendingAction(action);
       setShowSenderForm(true);
     } else {
-      if (action === 'save') handleSaveImage();
-      else if (action === 'share') handleTelegramInquiry();
+      handleTelegramInquiry();
     }
   };
 
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Persian/Arabic to English digits conversion helper
+    const p2e = (s: string) => s.replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
+                                .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString());
+    
+    const cleanPhone = p2e(senderInfo.phone);
+
     // Validate phone number length (must be 11 digits)
-    if (senderInfo.phone.length !== 11) {
+    if (cleanPhone.length !== 11) {
       alert('شماره تماس باید ۱۱ رقم باشد (مثال: 09123456789)');
       return;
     }
 
     setShowSenderForm(false);
-    if (pendingAction === 'save') handleSaveImage();
-    else if (pendingAction === 'share') handleTelegramInquiry();
-    setPendingAction(null);
+    
+    // Save current values to local variables to ensure they are captured correctly for the callback
+    const currentName = senderInfo.name;
+    const currentPhone = cleanPhone;
+
+    if (pendingAction === 'share') {
+      setTimeout(() => {
+        handleTelegramInquiry(currentName, currentPhone);
+        setPendingAction(null);
+      }, 150);
+    }
   };
 
   const handleSaveImage = async () => {
@@ -469,30 +487,41 @@ export const Store: React.FC = () => {
       const filename = `pish-faktor-${new Date().getTime()}.png`;
 
       // Optimized for Mobile/APK: Use Web Share API if available
-      if (navigator.share && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+      const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      
+      if (navigator.share && isMobile) {
         try {
-          const blob = await (await fetch(image)).blob();
+          const byteString = atob(image.split(',')[1]);
+          const mimeString = image.split(',')[0].split(':')[1].split(';')[0];
+          const ab = new ArrayBuffer(byteString.length);
+          const ia = new Uint8Array(ab);
+          for (let i = 0; i < byteString.length; i++) {
+            ia[i] = byteString.charCodeAt(i);
+          }
+          const blob = new Blob([ab], { type: mimeString });
           const file = new File([blob], filename, { type: 'image/png' });
-          await navigator.share({
-            files: [file],
-            title: 'پیش فاکتور',
-          });
-          showToast('تصویر آماده اشتراک‌گذاری یا ذخیره است');
-          return;
+          
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              files: [file],
+              title: 'پیش فاکتور',
+            });
+            showToast('آماده اشتراک‌گذاری یا ذخیره در گالری');
+            return;
+          }
         } catch (shareErr) {
-          console.log('Share failed, falling back to download', shareErr);
+          console.log('Share failed, try download', shareErr);
         }
       }
 
       // Standard Download Fallback (Works in Browsers)
-      const link = document.createElement('a');
+      const link = document.body.appendChild(document.createElement('a'));
       link.href = image;
       link.download = filename;
-      document.body.appendChild(link);
       link.click();
-      setTimeout(() => document.body.removeChild(link), 100);
+      setTimeout(() => document.body.removeChild(link), 300);
       
-      showToast('تصویر پیش فاکتور در گالری یا دانلودها ذخیره شد');
+      showToast('تصویر ایجاد شد. در گالری یا دانلودها ذخیره کنید.');
       
     } catch (error: any) {
       console.error('Error saving image:', error);
@@ -511,8 +540,12 @@ export const Store: React.FC = () => {
     }, 500);
   };
 
-  const handleTelegramInquiry = async () => {
+  const handleTelegramInquiry = async (nameOverride?: string, phoneOverride?: string) => {
     if (isSending) return;
+    
+    // Capture values locally with fallback to overrides for better APK stability
+    const currentName = nameOverride || senderInfo.name || 'نامشخص';
+    const currentPhone = phoneOverride || senderInfo.phone || 'نامشخص';
     
     setIsSending(true);
     
@@ -526,17 +559,18 @@ export const Store: React.FC = () => {
     });
 
     try {
-      // 1. First attempt: Direct client-side sending (Useful for APK/Mobile without a backend)
+      // 1. First attempt: Direct client-side sending (Useful for APK/Mobile)
       const directToken = import.meta.env.VITE_TELEGRAM_BOT_TOKEN;
       const directChatId = import.meta.env.VITE_TELEGRAM_CHAT_ID;
 
       if (directToken && directChatId) {
-        console.log("Attempting direct Telegram send from client...");
+        // Log for debugging APK environments
+        console.log("APK/Direct send triggered. Name:", currentName);
         
-        // Use HTML formatting for better Farsi support in Telegram
+        // Use HTML formatting for better Farsi support
         let message = `<b>🆕 استعلام قیمت جدید (ارسال مستقیم)</b>\n\n`;
-        message += `👤 <b>نام:</b> ${senderInfo.name || 'نامشخص'}\n`;
-        message += `📞 <b>تماس:</b> ${senderInfo.phone || 'نامشخص'}\n`;
+        message += `👤 <b>نام:</b> ${currentName}\n`;
+        message += `📞 <b>تماس:</b> ${currentPhone}\n`;
         message += `📦 <b>تعداد اقلام:</b> ${cartTotalItems}\n\n`;
         message += `<b>📋 لیست کالاها:</b>\n`;
         
@@ -548,7 +582,9 @@ export const Store: React.FC = () => {
         const telegramUrl = `https://api.telegram.org/bot${directToken}/sendMessage`;
         const response = await fetch(telegramUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json'
+          },
           body: JSON.stringify({
             chat_id: directChatId,
             text: message,
@@ -578,8 +614,8 @@ export const Store: React.FC = () => {
           'Accept': 'application/json'
         },
         body: JSON.stringify({
-          name: senderInfo.name,
-          phone: senderInfo.phone,
+          name: currentName,
+          phone: currentPhone,
           cart: cartItems,
           totalItems: cart.reduce((sum, item) => sum + item.quantity, 0)
         })
@@ -814,7 +850,8 @@ export const Store: React.FC = () => {
                       placeholder="09123456789"
                       value={senderInfo.phone}
                       onChange={(e) => {
-                        const val = e.target.value.replace(/[^0-9]/g, '');
+                        // Allow Persian/Arabic and English digits
+                        const val = e.target.value.replace(/[^0-9۰-۹٠-٩]/g, '');
                         if (val.length <= 11) {
                           setSenderInfo(prev => ({ ...prev, phone: val }));
                         }

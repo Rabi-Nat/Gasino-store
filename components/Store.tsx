@@ -395,41 +395,66 @@ export const Store: React.FC = () => {
     
     try {
       // Small delay to ensure any layout changes are settled
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise(resolve => setTimeout(resolve, 200));
 
       const canvas = await html2canvas(element, {
-        scale: 1.5, // Slightly lower scale for better compatibility
+        scale: 2,
         useCORS: true,
         allowTaint: true,
         backgroundColor: '#ffffff',
         logging: false,
-        windowWidth: element.scrollWidth,
         onclone: (clonedDoc) => {
-           const elements = clonedDoc.querySelectorAll('.no-print');
-           elements.forEach(el => {
-             (el as HTMLElement).style.display = 'none';
+           // 1. Force-replace oklch variables with HEX fallbacks in a global style
+           const style = clonedDoc.createElement('style');
+           style.innerHTML = `
+             :root, * { 
+               --color-blue-600: #2563eb !important;
+               --color-slate-900: #0f172a !important;
+               --color-slate-700: #334155 !important;
+               --color-slate-500: #64748b !important;
+               --color-slate-100: #f1f5f9 !important;
+               --color-slate-50: #f8fafc !important;
+             }
+             /* Remove all oklch references from CSS variables that html2canvas might try to parse */
+             * { color-scheme: light !important; }
+             .bg-blue-600 { background-color: #2563eb !important; }
+             .text-blue-600 { color: #2563eb !important; }
+           `;
+           clonedDoc.head.appendChild(style);
+
+           // 2. Be extremely aggressive: strip oklch from ALL computed styles manually
+           clonedDoc.querySelectorAll('*').forEach(el => {
+              const htmlEl = el as HTMLElement;
+              // Hide no-print elements
+              if (htmlEl.classList.contains('no-print')) {
+                htmlEl.style.display = 'none';
+                return;
+              }
+              
+              // html2canvas fails when it sees "oklch" in any property it tries to parse.
+              // We'll iterate through all styles and if they contain oklch, we set them to a safe fallback or clear them.
+              const styles = window.getComputedStyle(el);
+              if (styles.backgroundColor.includes('oklch')) htmlEl.style.backgroundColor = '#ffffff';
+              if (styles.color.includes('oklch')) htmlEl.style.color = '#1e293b';
+              if (styles.borderColor.includes('oklch')) htmlEl.style.borderColor = '#e2e8f0';
+              if (styles.fill.includes('oklch')) htmlEl.style.fill = 'currentColor';
+              if (styles.stroke.includes('oklch')) htmlEl.style.stroke = 'currentColor';
            });
         }
       });
       
       const image = canvas.toDataURL('image/png');
       
-      // Try to download
       const link = document.createElement('a');
       link.href = image;
       link.download = `pish-faktor-${new Date().getTime()}.png`;
-      link.target = '_blank'; // Fallback for some browsers
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-
-      // If it's a mobile device or if the above didn't "feel" like it worked, 
-      // we could also show the image in a modal or new tab as a fallback,
-      // but for now, the download is the standard way.
       
     } catch (error: any) {
       console.error('Error saving image:', error);
-      alert(`خطا در ذخیره تصویر: ${error.message || 'نامشخص'}\nاگر در پیش‌نمایش هستید، این قابلیت ممکن است با محدودیت اجرا شود.`);
+      alert(`خطا در ذخیره تصویر: ${error.message || 'نامشخص'}\nمشکل معمولاً مربوط به مفسر رنگ "oklch" در پوسته‌ی جدید است. در حال تلاش برای بهینه‌سازی...`);
     } finally {
       setIsCapturing(false);
     }
@@ -440,7 +465,6 @@ export const Store: React.FC = () => {
     
     setIsSending(true);
     
-    // Prepare the list for the API
     const cartItems = cart.map(item => {
       const product = PRODUCTS.find(p => p.id === item.productId);
       return {
@@ -451,9 +475,14 @@ export const Store: React.FC = () => {
     });
 
     try {
-      const response = await fetch(`${window.location.origin}/api/inquiry`, {
+      // Use standard endpoint
+      const endpoint = '/api/inquiry';
+      const response = await fetch(endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
         body: JSON.stringify({
           name: senderInfo.name,
           phone: senderInfo.phone,
@@ -462,9 +491,11 @@ export const Store: React.FC = () => {
         })
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Server responded with ${response.status}: ${errorText}`);
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await response.text();
+        console.error("Non-JSON response received:", text);
+        throw new Error("پاسخ سرور نامعتبر است. احتمالا مشکلی در متغیرهای محیطی تلگرام وجود دارد یا سرور متوقف شده است.");
       }
 
       const data = await response.json();
@@ -472,13 +503,12 @@ export const Store: React.FC = () => {
       if (data.success) {
         alert('استعلام شما با موفقیت ارسال شد. بزودی با شما تماس خواهیم گرفت.');
       } else {
-        alert(data.message || 'خطا در ارسال استعلام. لطفا از روش اشتراک‌گذاری دستی استفاده کنید.');
-        // Fallback to native share or print if the bot isn't configured
+        alert(data.message || 'خطا در ارسال استعلام.');
         handleNativeShare();
       }
     } catch (error: any) {
       console.error('Error sending inquiry:', error);
-      alert(`خطا در ارتباط با سرور: ${error.message || 'نامشخص'}\nلطفا اتصال خود را بررسی کنید.`);
+      alert(`خطا در ارتباط با سرور: ${error.message || 'نامشخص'}\nلطفا اتصال خود را بررسی کنید و از تنظیم بودن TOKEN و CHAT_ID در بخش Settings اطمینان حاصل کنید.`);
     } finally {
       setIsSending(false);
     }

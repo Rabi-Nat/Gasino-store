@@ -12,6 +12,23 @@ async function startServer() {
 
   app.use(express.json({ limit: '10mb' }));
 
+  // Debug middleware to log requests in AI Studio console
+  app.use((req, res, next) => {
+    console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+    next();
+  });
+
+  // Health check route
+  app.get("/api/health", (req, res) => {
+    res.json({ 
+        status: "ok", 
+        env: {
+            botToken: process.env.TELEGRAM_BOT_TOKEN ? "SET" : "MISSING",
+            chatId: process.env.TELEGRAM_CHAT_ID ? "SET" : "MISSING"
+        }
+    });
+  });
+
   // API route for Telegram Inquiry
   app.post("/api/inquiry", async (req, res) => {
     const { name, phone, cart, totalItems } = req.body;
@@ -55,19 +72,19 @@ async function startServer() {
       
       if (!data.ok) {
         console.error("Telegram API response not OK:", data);
-        return res.status(400).json({ 
+        return res.status(200).json({ 
           success: false, 
           message: `خطای تلگرام: ${data.description || "نامشخص"}` 
         });
       }
 
       console.log("Inquiry sent successfully to Telegram.");
-      res.json({ success: true });
+      return res.json({ success: true });
     } catch (error: any) {
       console.error("Error sending to Telegram:", error);
-      res.status(500).json({ 
+      return res.status(200).json({ // Return 200 even on error to avoid HTML error pages being returned to fetch
         success: false, 
-        message: `خطا در ارتباط با تلگرام: ${error.message || "نامشخص"}` 
+        message: `خطا در ارتباط با سرور یا تلگرام: ${error.message || "نامشخص"}` 
       });
     }
   });
@@ -82,7 +99,7 @@ async function startServer() {
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    app.get('*all', (req, res) => {
+    app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }

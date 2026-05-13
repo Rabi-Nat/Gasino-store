@@ -373,16 +373,12 @@ export const Store: React.FC = () => {
   const invoiceRef = useRef<HTMLDivElement>(null);
 
   const handleActionWithInfo = (action: 'save' | 'share') => {
-    if (action === 'save') {
-      handleSaveImage();
-      return;
-    }
-
     if (!senderInfo.name || !senderInfo.phone) {
       setPendingAction(action);
       setShowSenderForm(true);
     } else {
-      handleTelegramInquiry();
+      if (action === 'save') handleSaveImage();
+      else if (action === 'share') handleTelegramInquiry();
     }
   };
 
@@ -402,9 +398,8 @@ export const Store: React.FC = () => {
     
     try {
       // Small delay to ensure any layout changes are settled
-      await new Promise(resolve => setTimeout(resolve, 200));
+      await new Promise(resolve => setTimeout(resolve, 300));
 
-      // Attempt to capture with massive style cleanup
       const canvas = await html2canvas(element, {
         scale: 2,
         useCORS: true,
@@ -412,11 +407,9 @@ export const Store: React.FC = () => {
         backgroundColor: '#ffffff',
         logging: false,
         onclone: (clonedDoc) => {
-           // 1. Force HEX fallbacks for standard Tailwind colors in the global scope
            const style = clonedDoc.createElement('style');
            style.innerHTML = `
              * { 
-               /* Force-replace variables that often contain oklch in Tailwind 4 */
                --color-blue-600: #2563eb !important;
                --color-slate-900: #0f172a !important;
                --color-slate-800: #1e293b !important;
@@ -438,41 +431,43 @@ export const Store: React.FC = () => {
            `;
            clonedDoc.head.appendChild(style);
 
-           // 2. Aggressively strip oklch/oklab from ALL elements in the cloned document
-           // html2canvas crashes if it even detects these strings in a computed style.
+           // Strip oklch/oklab which crashes html2canvas in some environments
            const allElements = clonedDoc.querySelectorAll('*');
+           const defaultView = clonedDoc.defaultView || window;
+           
            allElements.forEach(el => {
               const htmlEl = el as HTMLElement;
-              const computed = window.getComputedStyle(el);
-              
-              // Helper to check for problematic color functions
-              const isBadColor = (val: string) => val.includes('oklch') || val.includes('oklab');
+              const computed = defaultView.getComputedStyle(el);
+              const isBadColor = (val: string) => val && (val.includes('oklch') || val.includes('oklab'));
 
               if (isBadColor(computed.color)) htmlEl.style.color = '#1e293b';
               if (isBadColor(computed.backgroundColor)) htmlEl.style.backgroundColor = '#ffffff';
               if (isBadColor(computed.borderColor)) htmlEl.style.borderColor = '#e2e8f0';
-              if (isBadColor(computed.fill)) htmlEl.style.fill = 'currentColor';
-              if (isBadColor(computed.stroke)) htmlEl.style.stroke = 'currentColor';
               
-              // Sometimes they are in variables
-              for (let i = 0; i < htmlEl.style.length; i++) {
-                const prop = htmlEl.style[i];
-                if (prop.startsWith('--') && isBadColor(htmlEl.style.getPropertyValue(prop))) {
-                  htmlEl.style.removeProperty(prop);
+              if (htmlEl.style) {
+                const propsToRemove: string[] = [];
+                for (let i = 0; i < htmlEl.style.length; i++) {
+                  const prop = htmlEl.style[i];
+                  if (prop.startsWith('--') && isBadColor(htmlEl.style.getPropertyValue(prop))) {
+                    propsToRemove.push(prop);
+                  }
                 }
+                propsToRemove.forEach(p => htmlEl.style.removeProperty(p));
               }
            });
         }
       });
       
       const image = canvas.toDataURL('image/png');
-      
+      const filename = `pish-faktor-${new Date().getTime()}.png`;
+
+      // Try multiple download methods for mobile compatibility
       const link = document.createElement('a');
       link.href = image;
-      link.download = `pish-faktor-${new Date().getTime()}.png`;
+      link.download = filename;
       document.body.appendChild(link);
       link.click();
-      document.body.removeChild(link);
+      setTimeout(() => document.body.removeChild(link), 100);
       
       showToast('تصویر پیش فاکتور در گالری ذخیره شد');
       
@@ -486,8 +481,11 @@ export const Store: React.FC = () => {
 
   const handlePrint = () => {
     showToast('در حال آماده‌سازی فایل چاپ/PDF...', 'info');
-    window.print();
-    showToast('فایل پیش فاکتور در مسیر دانلودها ذخیره شد');
+    setTimeout(() => {
+      window.print();
+      // Only show the success toast after the print dialog is closed
+      showToast('فایل پیش فاکتور در مسیر دانلودها ذخیره شد');
+    }, 500);
   };
 
   const handleTelegramInquiry = async () => {
@@ -518,8 +516,9 @@ export const Store: React.FC = () => {
         message += `📦 تعداد اقلام: ${cartTotalItems}\n\n`;
         message += `*لیست کالاها:*\n`;
         
-        cart.forEach((item, index) => {
-          message += `${index + 1}. ${item.name}: ${item.quantity} ${item.unit === 'branch' ? 'شاخه' : 'عدد'}\n`;
+        cartItems.forEach((item, index) => {
+          const unitLabel = item.unit === 'branch' ? 'شاخه' : 'عدد';
+          message += `${index + 1}. ${item.name}: ${item.quantity} ${unitLabel}\n`;
         });
 
         const telegramUrl = `https://api.telegram.org/bot${directToken}/sendMessage`;

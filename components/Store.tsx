@@ -505,7 +505,46 @@ export const Store: React.FC = () => {
     });
 
     try {
-      // Use standard endpoint or absolute URL from env for mobile/android environments
+      // 1. First attempt: Direct client-side sending (Useful for APK/Mobile without a backend)
+      // Note: For this to work in APK, you must set these in your .env or Environment Variables
+      const directToken = import.meta.env.VITE_TELEGRAM_BOT_TOKEN;
+      const directChatId = import.meta.env.VITE_TELEGRAM_CHAT_ID;
+
+      if (directToken && directChatId) {
+        console.log("Attempting direct Telegram send from client...");
+        let message = `🆕 *استعلام قیمت جدید (ارسال مستقیم)*\n\n`;
+        message += `👤 نام: ${senderInfo.name}\n`;
+        message += `📞 تماس: ${senderInfo.phone}\n`;
+        message += `📦 تعداد اقلام: ${cartTotalItems}\n\n`;
+        message += `*لیست کالاها:*\n`;
+        
+        cart.forEach((item, index) => {
+          message += `${index + 1}. ${item.name}: ${item.quantity} ${item.unit === 'branch' ? 'شاخه' : 'عدد'}\n`;
+        });
+
+        const telegramUrl = `https://api.telegram.org/bot${directToken}/sendMessage`;
+        const response = await fetch(telegramUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: directChatId,
+            text: message,
+            parse_mode: 'Markdown'
+          })
+        });
+
+        const data = await response.json();
+        if (data.ok) {
+          showToast('استعلام شما با موفقیت ارسال شد. کارشناس فروش بزودی با شما تماس خواهد گرفت.');
+          setIsSending(false);
+          setShowSenderForm(false);
+          return;
+        } else {
+          console.error("Direct send failed, falling back to server...", data.description);
+        }
+      }
+
+      // 2. Fallback: Use server-side endpoint (for Web environments)
       const apiBase = import.meta.env.VITE_API_BASE_URL || '';
       const endpoint = `${apiBase}/api/inquiry`;
       

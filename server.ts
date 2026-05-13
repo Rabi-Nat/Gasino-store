@@ -39,6 +39,7 @@ async function startServer() {
     });
 
     try {
+      console.log(`Sending inquiry to Telegram for: ${name}`);
       const telegramUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
       const response = await fetch(telegramUrl, {
         method: "POST",
@@ -53,15 +54,20 @@ async function startServer() {
       const data = await response.json();
       
       if (!data.ok) {
-        throw new Error(data.description || "Telegram API Error");
+        console.error("Telegram API response not OK:", data);
+        return res.status(400).json({ 
+          success: false, 
+          message: `خطای تلگرام: ${data.description || "نامشخص"}` 
+        });
       }
 
+      console.log("Inquiry sent successfully to Telegram.");
       res.json({ success: true });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error sending to Telegram:", error);
       res.status(500).json({ 
         success: false, 
-        message: "خطا در ارسال به تلگرام. لطفا دوباره تلاش کنید." 
+        message: `خطا در ارتباط با تلگرام: ${error.message || "نامشخص"}` 
       });
     }
   });

@@ -398,15 +398,17 @@ export const Store: React.FC = () => {
       await new Promise(resolve => setTimeout(resolve, 100));
 
       const canvas = await html2canvas(element, {
-        scale: 2,
+        scale: 1.5, // Slightly lower scale for better compatibility
         useCORS: true,
+        allowTaint: true,
         backgroundColor: '#ffffff',
         logging: false,
         windowWidth: element.scrollWidth,
         onclone: (clonedDoc) => {
-           // Ensure elements are visible in the clone
-           const el = clonedDoc.querySelector('.no-print');
-           if (el) (el as HTMLElement).style.display = 'none';
+           const elements = clonedDoc.querySelectorAll('.no-print');
+           elements.forEach(el => {
+             (el as HTMLElement).style.display = 'none';
+           });
         }
       });
       
@@ -425,9 +427,9 @@ export const Store: React.FC = () => {
       // we could also show the image in a modal or new tab as a fallback,
       // but for now, the download is the standard way.
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving image:', error);
-      alert('خطا در ذخیره تصویر. اگر در پیش‌نمایش هستید، این قابلیت ممکن است با محدودیت اجرا شود.');
+      alert(`خطا در ذخیره تصویر: ${error.message || 'نامشخص'}\nاگر در پیش‌نمایش هستید، این قابلیت ممکن است با محدودیت اجرا شود.`);
     } finally {
       setIsCapturing(false);
     }
@@ -449,16 +451,21 @@ export const Store: React.FC = () => {
     });
 
     try {
-      const response = await fetch('/api/inquiry', {
+      const response = await fetch(`${window.location.origin}/api/inquiry`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: senderInfo.name,
           phone: senderInfo.phone,
           cart: cartItems,
-          totalItems: cart.length
+          totalItems: cart.reduce((sum, item) => sum + item.quantity, 0)
         })
       });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Server responded with ${response.status}: ${errorText}`);
+      }
 
       const data = await response.json();
 
@@ -469,9 +476,9 @@ export const Store: React.FC = () => {
         // Fallback to native share or print if the bot isn't configured
         handleNativeShare();
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error sending inquiry:', error);
-      alert('خطا در ارتباط با سرور. لطفا اتصال خود را بررسی کنید.');
+      alert(`خطا در ارتباط با سرور: ${error.message || 'نامشخص'}\nلطفا اتصال خود را بررسی کنید.`);
     } finally {
       setIsSending(false);
     }

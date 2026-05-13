@@ -23,7 +23,7 @@ async function startServer() {
       console.warn("Telegram credentials missing in environment variables.");
       return res.status(200).json({ 
         success: false, 
-        message: "تنظیمات تلگرام (Token/ChatID) در سرور یافت نشد. لطفا متغیرهای محیطی را تنظیم کنید." 
+        message: `تنظیمات تلگرام یافت نشد. (TOKEN: ${botToken ? '✅' : '❌'} | ID: ${chatId ? '✅' : '❌'}) لطفا در بخش Settings > Environment Variables این دو مورد را تعریف کنید.` 
       });
     }
 

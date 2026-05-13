@@ -827,7 +827,7 @@ export const Store: React.FC = () => {
                     <input 
                       required
                       name="phone"
-                      type="text" 
+                      type="tel" 
                       dir="ltr"
                       maxLength={11}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all font-bold text-right"
@@ -836,7 +836,14 @@ export const Store: React.FC = () => {
                       inputMode="numeric"
                       pattern="[0-9]*"
                       onChange={(e) => {
-                        const val = e.target.value.replace(/[^0-9]/g, '').slice(0, 11);
+                        const rawValue = e.target.value;
+                        // Check if any Persian/Arabic digits or characters are present
+                        if (/[۰-۹٠-٩]/.test(rawValue)) {
+                          showToast('لطفاً کیبورد را به انگلیسی تغییر دهید', 'info');
+                        }
+                        
+                        // Strictly allow only English digits
+                        const val = rawValue.replace(/[^0-9]/g, '').slice(0, 11);
                         setSenderInfo(prev => ({ ...prev, phone: val }));
                       }}
                     />

@@ -27,6 +27,9 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
 
 interface Product {
   id: string;
@@ -35,6 +38,9 @@ interface Product {
   category: 'pipe' | 'elbow' | 'tee' | 'reducer' | 'valve' | 'nipple' | 'clamp' | 'accessory';
   basePrice?: number; // Placeholder for future use
 }
+
+const p2e = (s: string) => s.replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
+                            .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString());
 
 const PRODUCTS: Product[] = [
   // Pipes API
@@ -385,10 +391,6 @@ export const Store: React.FC = () => {
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Persian/Arabic to English digits conversion helper
-    const p2e = (s: string) => s.replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
-                                .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString());
-    
     const cleanPhone = p2e(senderInfo.phone);
 
     // Validate phone number length (must be 11 digits)
@@ -486,12 +488,56 @@ export const Store: React.FC = () => {
       
       pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
       
-      // Better download method for different environments
+      const fileName = `gasino-invoice-${new Date().getTime()}.pdf`;
+
+      // Optimized for Android/APK: Use Capacitor plugins if available
+      if (Capacitor.isNativePlatform()) {
+        const pdfBase64 = pdf.output('datauristring').split(',')[1];
+        
+        try {
+          // Attempt to write to Documents which is more visible to users than Cache
+          const result = await Filesystem.writeFile({
+            path: fileName,
+            data: pdfBase64,
+            directory: Directory.Documents,
+          });
+
+          await Share.share({
+            title: 'پیش‌فاکتور ملزومات گاز',
+            text: 'فایل پیش‌فاکتور ملزومات گاز با موفقیت ایجاد شد.',
+            url: result.uri,
+            dialogTitle: 'ارسال یا ذخیره پیش‌فاکتور',
+          });
+
+          showToast('فایل در پوشه Documents ذخیره شد و آماده اشتراک‌گذاری است');
+          return;
+        } catch (nativeErr) {
+          console.error('Native PDF Error:', nativeErr);
+          // Retry with Cache if Documents fails (sometimes permissions vary)
+          try {
+            const cacheResult = await Filesystem.writeFile({
+              path: fileName,
+              data: pdfBase64,
+              directory: Directory.Cache,
+            });
+            await Share.share({
+              url: cacheResult.uri,
+              title: 'پیش‌فاکتور ملزومات گاز',
+            });
+            showToast('آماده اشتراک‌گذاری یا ذخیره');
+            return;
+          } catch (cacheErr) {
+            console.error('Cache fallback failed:', cacheErr);
+          }
+        }
+      }
+
+      // Better download method for different environments (Web Fallback)
       const blob = pdf.output('blob');
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `gasino-invoice-${new Date().getTime()}.pdf`;
+      link.download = fileName;
       document.body.appendChild(link);
       link.click();
       
@@ -514,9 +560,9 @@ export const Store: React.FC = () => {
   const handleTelegramInquiry = async (nameOverride?: string, phoneOverride?: string) => {
     if (isSending) return;
     
-    // Capture values locally with fallback to overrides for better APK stability
-    const currentName = nameOverride || senderInfo.name || 'نامشخص';
-    const currentPhone = phoneOverride || senderInfo.phone || 'نامشخص';
+    // Explicitly prioritize overrides and ensure they are not empty
+    const currentName = (nameOverride && nameOverride.trim() !== '') ? nameOverride : (senderInfo.name.trim() !== '' ? senderInfo.name : 'نامشخص');
+    const currentPhone = (phoneOverride && phoneOverride.trim() !== '') ? phoneOverride : (senderInfo.phone.trim() !== '' ? senderInfo.phone : 'نامشخص');
     
     setIsSending(true);
     
@@ -554,7 +600,7 @@ export const Store: React.FC = () => {
         const response = await fetch(telegramUrl, {
           method: 'POST',
           headers: { 
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json; charset=utf-8'
           },
           body: JSON.stringify({
             chat_id: directChatId,
@@ -581,7 +627,7 @@ export const Store: React.FC = () => {
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json; charset=utf-8',
           'Accept': 'application/json'
         },
         body: JSON.stringify({
@@ -780,9 +826,10 @@ export const Store: React.FC = () => {
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all font-bold text-right"
                       placeholder="09123456789"
                       value={senderInfo.phone}
+                      inputMode="tel"
                       onChange={(e) => {
-                        // Allow Persian/Arabic and English digits
-                        const val = e.target.value.replace(/[^0-9۰-۹٠-٩]/g, '');
+                        const converted = p2e(e.target.value);
+                        const val = converted.replace(/[^0-9]/g, '');
                         if (val.length <= 11) {
                           setSenderInfo(prev => ({ ...prev, phone: val }));
                         }
@@ -962,9 +1009,12 @@ export const Store: React.FC = () => {
                                     </button>
                                     <input 
                                         type="number"
+                                        inputMode="numeric"
                                         className="w-10 text-center font-black text-sm text-slate-700 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                         value={inCart.quantity}
-                                        onChange={(e) => setManualQuantity(product.id, e.target.value)}
+                                        onChange={(e) => {
+                                            setManualQuantity(product.id, p2e(e.target.value));
+                                        }}
                                     />
                                     <button 
                                       onClick={() => updateQuantity(product.id, 1)}

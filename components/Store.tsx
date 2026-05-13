@@ -5,7 +5,8 @@ import {
   Minus, 
   Trash2, 
   FileText, 
-  CheckCircle2, 
+  CheckCircle2,
+  Check, 
   ChevronDown, 
   ChevronUp,
   Package,
@@ -360,6 +361,12 @@ export const Store: React.FC = () => {
   const cartTotalItems = cart.length;
   const [isCapturing, setIsCapturing] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'info' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'info' = 'success') => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 5000);
+  };
   const [senderInfo, setSenderInfo] = useState({ name: '', phone: '' });
   const [showSenderForm, setShowSenderForm] = useState(false);
   const [pendingAction, setPendingAction] = useState<'save' | 'share' | null>(null);
@@ -397,6 +404,7 @@ export const Store: React.FC = () => {
       // Small delay to ensure any layout changes are settled
       await new Promise(resolve => setTimeout(resolve, 200));
 
+      // Attempt to capture with massive style cleanup
       const canvas = await html2canvas(element, {
         scale: 2,
         useCORS: true,
@@ -404,41 +412,55 @@ export const Store: React.FC = () => {
         backgroundColor: '#ffffff',
         logging: false,
         onclone: (clonedDoc) => {
-           // 1. Force-replace oklch variables with HEX fallbacks in a global style
+           // 1. Force HEX fallbacks for standard Tailwind colors in the global scope
            const style = clonedDoc.createElement('style');
            style.innerHTML = `
-             :root, * { 
+             * { 
+               /* Force-replace variables that often contain oklch in Tailwind 4 */
                --color-blue-600: #2563eb !important;
                --color-slate-900: #0f172a !important;
+               --color-slate-800: #1e293b !important;
                --color-slate-700: #334155 !important;
+               --color-slate-600: #475569 !important;
                --color-slate-500: #64748b !important;
+               --color-slate-400: #94a3b8 !important;
+               --color-slate-300: #cbd5e1 !important;
+               --color-slate-200: #e2e8f0 !important;
                --color-slate-100: #f1f5f9 !important;
                --color-slate-50: #f8fafc !important;
+               color-scheme: light !important;
              }
-             /* Remove all oklch references from CSS variables that html2canvas might try to parse */
-             * { color-scheme: light !important; }
              .bg-blue-600 { background-color: #2563eb !important; }
              .text-blue-600 { color: #2563eb !important; }
+             .text-slate-900 { color: #0f172a !important; }
+             .bg-white { background-color: #ffffff !important; }
+             .no-print { display: none !important; }
            `;
            clonedDoc.head.appendChild(style);
 
-           // 2. Be extremely aggressive: strip oklch from ALL computed styles manually
-           clonedDoc.querySelectorAll('*').forEach(el => {
+           // 2. Aggressively strip oklch/oklab from ALL elements in the cloned document
+           // html2canvas crashes if it even detects these strings in a computed style.
+           const allElements = clonedDoc.querySelectorAll('*');
+           allElements.forEach(el => {
               const htmlEl = el as HTMLElement;
-              // Hide no-print elements
-              if (htmlEl.classList.contains('no-print')) {
-                htmlEl.style.display = 'none';
-                return;
-              }
+              const computed = window.getComputedStyle(el);
               
-              // html2canvas fails when it sees "oklch" in any property it tries to parse.
-              // We'll iterate through all styles and if they contain oklch, we set them to a safe fallback or clear them.
-              const styles = window.getComputedStyle(el);
-              if (styles.backgroundColor.includes('oklch')) htmlEl.style.backgroundColor = '#ffffff';
-              if (styles.color.includes('oklch')) htmlEl.style.color = '#1e293b';
-              if (styles.borderColor.includes('oklch')) htmlEl.style.borderColor = '#e2e8f0';
-              if (styles.fill.includes('oklch')) htmlEl.style.fill = 'currentColor';
-              if (styles.stroke.includes('oklch')) htmlEl.style.stroke = 'currentColor';
+              // Helper to check for problematic color functions
+              const isBadColor = (val: string) => val.includes('oklch') || val.includes('oklab');
+
+              if (isBadColor(computed.color)) htmlEl.style.color = '#1e293b';
+              if (isBadColor(computed.backgroundColor)) htmlEl.style.backgroundColor = '#ffffff';
+              if (isBadColor(computed.borderColor)) htmlEl.style.borderColor = '#e2e8f0';
+              if (isBadColor(computed.fill)) htmlEl.style.fill = 'currentColor';
+              if (isBadColor(computed.stroke)) htmlEl.style.stroke = 'currentColor';
+              
+              // Sometimes they are in variables
+              for (let i = 0; i < htmlEl.style.length; i++) {
+                const prop = htmlEl.style[i];
+                if (prop.startsWith('--') && isBadColor(htmlEl.style.getPropertyValue(prop))) {
+                  htmlEl.style.removeProperty(prop);
+                }
+              }
            });
         }
       });
@@ -452,12 +474,20 @@ export const Store: React.FC = () => {
       link.click();
       document.body.removeChild(link);
       
+      showToast('تصویر پیش فاکتور در گالری ذخیره شد');
+      
     } catch (error: any) {
       console.error('Error saving image:', error);
-      alert(`خطا در ذخیره تصویر: ${error.message || 'نامشخص'}\nمشکل معمولاً مربوط به مفسر رنگ "oklch" در پوسته‌ی جدید است. در حال تلاش برای بهینه‌سازی...`);
+      alert('خطا در ایجاد تصویر. لطفاً از گزینه "چاپ / ذخیره PDF" استفاده کنید که دقیق‌تر است.');
     } finally {
       setIsCapturing(false);
     }
+  };
+
+  const handlePrint = () => {
+    showToast('در حال آماده‌سازی فایل چاپ/PDF...', 'info');
+    window.print();
+    showToast('فایل پیش فاکتور در مسیر دانلودها ذخیره شد');
   };
 
   const handleTelegramInquiry = async () => {
@@ -495,13 +525,17 @@ export const Store: React.FC = () => {
       if (!contentType || !contentType.includes("application/json")) {
         const text = await response.text();
         console.error("Non-JSON response received:", text);
-        throw new Error("پاسخ سرور نامعتبر است. احتمالا مشکلی در متغیرهای محیطی تلگرام وجود دارد یا سرور متوقف شده است.");
+        // Special diagnostic for the user
+        if (text.includes("<!DOCTYPE html>")) {
+          throw new Error("سرور به جای پاسخ داده، یک صفحه وب برگرداند. این معمولاً یعنی آدرس پیدا نشده یا سرور در حال ریبوت است. لطفاً چند لحظه صبر کرده و دوباره تلاش کنید.");
+        }
+        throw new Error("پاسخ سرور نامعتبر است. لطفاً از تنظیم بودن دقیق TELEGRAM_BOT_TOKEN و TELEGRAM_CHAT_ID در بخش Settings اطمینان حاصل کنید.");
       }
 
       const data = await response.json();
 
       if (data.success) {
-        alert('استعلام شما با موفقیت ارسال شد. بزودی با شما تماس خواهیم گرفت.');
+        showToast('استعلام شما با موفقیت ارسال شد. کارشناس فروش بزودی با شما تماس خواهد گرفت.');
       } else {
         alert(data.message || 'خطا در ارسال استعلام.');
         handleNativeShare();
@@ -612,33 +646,72 @@ export const Store: React.FC = () => {
           </div>
         </div>
 
-        <div className="mt-8 flex flex-col md:flex-row gap-4 justify-center items-center no-print px-4">
+        <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4 no-print px-4">
             <button 
                 onClick={() => handleActionWithInfo('save')}
                 disabled={isCapturing}
-                className={`w-full md:w-auto ${isCapturing ? 'bg-slate-400' : 'bg-green-600 hover:bg-green-700'} text-white px-8 py-4 rounded-2xl font-black flex items-center justify-center gap-3 active:scale-95 transition-all shadow-lg shadow-green-100 disabled:cursor-not-allowed`}
+                className={`w-full ${isCapturing ? 'bg-slate-400' : 'bg-green-600 hover:bg-green-700'} text-white px-6 py-4 rounded-2xl font-black flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-green-100 disabled:cursor-not-allowed`}
             >
               {isCapturing ? (
-                <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               ) : (
-                <Download className="w-6 h-6" />
+                <Download className="w-5 h-5" />
               )}
-              {isCapturing ? 'در حال پردازش...' : 'ذخیره لیست (تصویر)'}
+              {isCapturing ? 'در حال پردازش...' : 'ذخیره عکس'}
+            </button>
+
+            <button 
+                onClick={handlePrint}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white px-6 py-4 rounded-2xl font-black flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-blue-100"
+            >
+              <FileText className="w-5 h-5" />
+              چاپ / ذخیره PDF
             </button>
             
             <button 
                 onClick={() => handleActionWithInfo('share')}
                 disabled={isSending}
-                className={`w-full md:w-auto ${isSending ? 'bg-slate-400' : 'bg-slate-900 hover:bg-slate-800'} text-white px-8 py-4 rounded-2xl font-black flex items-center justify-center gap-3 active:scale-95 transition-all shadow-lg shadow-slate-100 disabled:cursor-not-allowed`}
+                className={`w-full ${isSending ? 'bg-slate-400' : 'bg-slate-900 hover:bg-slate-800'} text-white px-6 py-4 rounded-2xl font-black flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-slate-100 disabled:cursor-not-allowed`}
             >
               {isSending ? (
-                <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               ) : (
-                <Share2 className="w-6 h-6" />
+                <Share2 className="w-5 h-5" />
               )}
-              {isSending ? 'در حال ارسال...' : 'استعلام قیمت پیش‌فاکتور'}
+              {isSending ? 'در حال ارسال...' : 'استعلام قیمت'}
             </button>
         </div>
+
+        {/* Notifications Toast */}
+        <AnimatePresence>
+          {notification && (
+              <motion.div 
+                  initial={{ opacity: 0, y: 50, scale: 0.9 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 50, scale: 0.9 }}
+                  className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[9999] w-[90%] max-w-md"
+              >
+                  <div className={`flex items-center gap-3 p-4 rounded-2xl shadow-2xl border ${
+                      notification.type === 'success' 
+                      ? 'bg-green-600 border-green-500 text-white' 
+                      : 'bg-blue-600 border-blue-500 text-white'
+                  }`}>
+                      {notification.type === 'success' ? (
+                          <div className="bg-white/20 p-1.5 rounded-full">
+                              <Check className="w-5 h-5" />
+                          </div>
+                      ) : (
+                          <div className="bg-white/20 p-1.5 rounded-full animate-pulse">
+                              <FileText className="w-5 h-5" />
+                          </div>
+                      )}
+                      <p className="font-bold text-sm md:text-base leading-relaxed">
+                          {notification.message}
+                      </p>
+                  </div>
+              </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Sender Info Modal */}
         <AnimatePresence>

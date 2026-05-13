@@ -31,31 +31,36 @@ async function startServer() {
 
   // API route for Telegram Inquiry
   app.post("/api/inquiry", async (req, res) => {
-    const { name, phone, cart, totalItems } = req.body;
-    
-    const botToken = process.env.TELEGRAM_BOT_TOKEN;
-    const chatId = process.env.TELEGRAM_CHAT_ID;
-
-    if (!botToken || !chatId) {
-      console.warn("Telegram credentials missing in environment variables.");
-      return res.status(200).json({ 
-        success: false, 
-        message: `تنظیمات تلگرام یافت نشد. (TOKEN: ${botToken ? '✅' : '❌'} | ID: ${chatId ? '✅' : '❌'}) لطفا در بخش Settings > Environment Variables این دو مورد را تعریف کنید.` 
-      });
-    }
-
-    // Format the message
-    let message = `🆕 *استعلام قیمت جدید*\n\n`;
-    message += `👤 نام: ${name}\n`;
-    message += `📞 تماس: ${phone}\n`;
-    message += `📦 تعداد اقلام: ${totalItems}\n\n`;
-    message += `*لیست کالاها:*\n`;
-    
-    cart.forEach((item: any, index: number) => {
-      message += `${index + 1}. ${item.name}: ${item.quantity} ${item.unit === 'branch' ? 'شاخه' : 'عدد'}\n`;
-    });
+    // Explicitly set JSON content type
+    res.setHeader('Content-Type', 'application/json');
 
     try {
+      const { name, phone, cart, totalItems } = req.body;
+      
+      const botToken = process.env.TELEGRAM_BOT_TOKEN?.trim();
+      const chatId = process.env.TELEGRAM_CHAT_ID?.trim();
+
+      console.log(`[DEBUG] Attempting Telegram send. TOKEN_LEN: ${botToken?.length || 0}, CHAT_ID: ${chatId}`);
+
+      if (!botToken || !chatId) {
+        return res.json({ 
+          success: false, 
+          message: "تنظیمات تلگرام (TOKEN یا CHAT_ID) در سرور یافت نشد. لطفاً در بخش Settings > Secrets این مقادیر را با نام دقیق TELEGRAM_BOT_TOKEN و TELEGRAM_CHAT_ID تعریف کنید." 
+        });
+      }
+
+      // Format the message
+      let message = `🆕 *استعلام قیمت جدید*\n\n`;
+      message += `👤 نام: ${name}\n`;
+      message += `📞 تماس: ${phone}\n`;
+      message += `📦 تعداد اقلام: ${totalItems}\n\n`;
+      message += `*لیست کالاها:*\n`;
+      
+      cart.forEach((item: any, index: number) => {
+        const unitLabel = item.unit === 'branch' ? 'شاخه' : 'عدد';
+        message += `${index + 1}. ${item.name}: ${item.quantity} ${unitLabel}\n`;
+      });
+
       console.log(`Sending inquiry to Telegram for: ${name}`);
       const telegramUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
       const response = await fetch(telegramUrl, {
@@ -68,23 +73,34 @@ async function startServer() {
         })
       });
 
-      const data = await response.json();
+      const responseText = await response.text();
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (e) {
+        console.error("Failed to parse Telegram response:", responseText);
+        return res.json({ success: false, message: "پاسخ نامعتبر از تلگرام." });
+      }
       
       if (!data.ok) {
         console.error("Telegram API response not OK:", data);
-        return res.status(200).json({ 
+        let errorMsg = `خطای تلگرام: ${data.description || "نامشخص"}`;
+        if (data.description?.includes("Unauthorized")) errorMsg = "توکن تلگرام (TOKEN) معتبر نیست.";
+        if (data.description?.includes("chat not found")) errorMsg = "شناسه چت (CHAT_ID) معتبر نیست یا ربات در آن عضو نیست.";
+        
+        return res.json({ 
           success: false, 
-          message: `خطای تلگرام: ${data.description || "نامشخص"}` 
+          message: errorMsg 
         });
       }
 
       console.log("Inquiry sent successfully to Telegram.");
       return res.json({ success: true });
     } catch (error: any) {
-      console.error("Error sending to Telegram:", error);
-      return res.status(200).json({ // Return 200 even on error to avoid HTML error pages being returned to fetch
+      console.error("Critical error in /api/inquiry:", error);
+      return res.json({ 
         success: false, 
-        message: `خطا در ارتباط با سرور یا تلگرام: ${error.message || "نامشخص"}` 
+        message: `خطای سرور: ${error.message || "نامشخص"}` 
       });
     }
   });

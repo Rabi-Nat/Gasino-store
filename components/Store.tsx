@@ -39,9 +39,6 @@ interface Product {
   basePrice?: number; // Placeholder for future use
 }
 
-const p2e = (s: string) => s.replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d).toString())
-                            .replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString());
-
 const PRODUCTS: Product[] = [
   // Pipes API
   { id: 'p-12-api', name: 'لوله ۱/۲ اینچ سنگین (API)', unit: 'branch', category: 'pipe' },
@@ -396,11 +393,11 @@ export const Store: React.FC = () => {
     const capturedName = formData.get('name') as string || senderInfo.name;
     const capturedPhone = formData.get('phone') as string || senderInfo.phone;
     
-    const cleanPhone = p2e(capturedPhone);
+    const cleanPhone = (capturedPhone || '').replace(/[^0-9]/g, '');
 
     // Validate phone number length (must be 11 digits)
     if (cleanPhone.length !== 11) {
-      showToast('شماره تماس باید ۱۱ رقم باشد (کیبورد در حالت انگلیسی باشد)', 'info');
+      showToast('شماره تماس باید ۱۱ رقم باشد -و کیبورد در حالت انگلیسی باشد-', 'info');
       return;
     }
 
@@ -830,7 +827,7 @@ export const Store: React.FC = () => {
                     <input 
                       required
                       name="phone"
-                      type="tel" 
+                      type="text" 
                       dir="ltr"
                       maxLength={11}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all font-bold text-right"
@@ -839,8 +836,7 @@ export const Store: React.FC = () => {
                       inputMode="numeric"
                       pattern="[0-9]*"
                       onChange={(e) => {
-                        const converted = p2e(e.target.value);
-                        const val = converted.replace(/[^0-9]/g, '').slice(0, 11);
+                        const val = e.target.value.replace(/[^0-9]/g, '').slice(0, 11);
                         setSenderInfo(prev => ({ ...prev, phone: val }));
                       }}
                     />
@@ -1019,10 +1015,12 @@ export const Store: React.FC = () => {
                                     <input 
                                         type="number"
                                         inputMode="numeric"
+                                        pattern="[0-9]*"
                                         className="w-10 text-center font-black text-sm text-slate-700 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                         value={inCart.quantity}
                                         onChange={(e) => {
-                                            setManualQuantity(product.id, p2e(e.target.value));
+                                            const val = e.target.value.replace(/[^0-9]/g, '');
+                                            setManualQuantity(product.id, val);
                                         }}
                                     />
                                     <button 

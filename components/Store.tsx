@@ -384,6 +384,13 @@ export const Store: React.FC = () => {
 
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate phone number length (must be 11 digits)
+    if (senderInfo.phone.length !== 11) {
+      alert('شماره تماس باید ۱۱ رقم باشد (مثال: 09123456789)');
+      return;
+    }
+
     setShowSenderForm(false);
     if (pendingAction === 'save') handleSaveImage();
     else if (pendingAction === 'share') handleTelegramInquiry();
@@ -461,7 +468,23 @@ export const Store: React.FC = () => {
       const image = canvas.toDataURL('image/png');
       const filename = `pish-faktor-${new Date().getTime()}.png`;
 
-      // Try multiple download methods for mobile compatibility
+      // Optimized for Mobile/APK: Use Web Share API if available
+      if (navigator.share && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+        try {
+          const blob = await (await fetch(image)).blob();
+          const file = new File([blob], filename, { type: 'image/png' });
+          await navigator.share({
+            files: [file],
+            title: 'پیش فاکتور',
+          });
+          showToast('تصویر آماده اشتراک‌گذاری یا ذخیره است');
+          return;
+        } catch (shareErr) {
+          console.log('Share failed, falling back to download', shareErr);
+        }
+      }
+
+      // Standard Download Fallback (Works in Browsers)
       const link = document.createElement('a');
       link.href = image;
       link.download = filename;
@@ -469,7 +492,7 @@ export const Store: React.FC = () => {
       link.click();
       setTimeout(() => document.body.removeChild(link), 100);
       
-      showToast('تصویر پیش فاکتور در گالری ذخیره شد');
+      showToast('تصویر پیش فاکتور در گالری یا دانلودها ذخیره شد');
       
     } catch (error: any) {
       console.error('Error saving image:', error);
@@ -504,17 +527,18 @@ export const Store: React.FC = () => {
 
     try {
       // 1. First attempt: Direct client-side sending (Useful for APK/Mobile without a backend)
-      // Note: For this to work in APK, you must set these in your .env or Environment Variables
       const directToken = import.meta.env.VITE_TELEGRAM_BOT_TOKEN;
       const directChatId = import.meta.env.VITE_TELEGRAM_CHAT_ID;
 
       if (directToken && directChatId) {
         console.log("Attempting direct Telegram send from client...");
-        let message = `🆕 *استعلام قیمت جدید (ارسال مستقیم)*\n\n`;
-        message += `👤 نام: ${senderInfo.name}\n`;
-        message += `📞 تماس: ${senderInfo.phone}\n`;
-        message += `📦 تعداد اقلام: ${cartTotalItems}\n\n`;
-        message += `*لیست کالاها:*\n`;
+        
+        // Use HTML formatting for better Farsi support in Telegram
+        let message = `<b>🆕 استعلام قیمت جدید (ارسال مستقیم)</b>\n\n`;
+        message += `👤 <b>نام:</b> ${senderInfo.name || 'نامشخص'}\n`;
+        message += `📞 <b>تماس:</b> ${senderInfo.phone || 'نامشخص'}\n`;
+        message += `📦 <b>تعداد اقلام:</b> ${cartTotalItems}\n\n`;
+        message += `<b>📋 لیست کالاها:</b>\n`;
         
         cartItems.forEach((item, index) => {
           const unitLabel = item.unit === 'branch' ? 'شاخه' : 'عدد';
@@ -528,7 +552,7 @@ export const Store: React.FC = () => {
           body: JSON.stringify({
             chat_id: directChatId,
             text: message,
-            parse_mode: 'Markdown'
+            parse_mode: 'HTML'
           })
         });
 
@@ -539,7 +563,7 @@ export const Store: React.FC = () => {
           setShowSenderForm(false);
           return;
         } else {
-          console.error("Direct send failed, falling back to server...", data.description);
+          console.error("Direct send failed:", data.description);
         }
       }
 
@@ -785,10 +809,16 @@ export const Store: React.FC = () => {
                       required
                       type="tel" 
                       dir="ltr"
+                      maxLength={11}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all font-bold text-right"
                       placeholder="09123456789"
                       value={senderInfo.phone}
-                      onChange={(e) => setSenderInfo(prev => ({ ...prev, phone: e.target.value }))}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/[^0-9]/g, '');
+                        if (val.length <= 11) {
+                          setSenderInfo(prev => ({ ...prev, phone: val }));
+                        }
+                      }}
                     />
                   </div>
                   <div className="flex gap-3 pt-2">

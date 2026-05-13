@@ -384,32 +384,37 @@ export const Store: React.FC = () => {
       setPendingAction(action);
       setShowSenderForm(true);
     } else {
-      handleTelegramInquiry();
+      handleTelegramInquiry(senderInfo.name, senderInfo.phone);
     }
   };
 
-  const handleFormSubmit = (e: React.FormEvent) => {
+  const handleFormSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     
-    const cleanPhone = p2e(senderInfo.phone);
+    // Fallback capture from form directly in case state is stale on some Android devices
+    const formData = new FormData(e.currentTarget);
+    const capturedName = formData.get('name') as string || senderInfo.name;
+    const capturedPhone = formData.get('phone') as string || senderInfo.phone;
+    
+    const cleanPhone = p2e(capturedPhone);
 
     // Validate phone number length (must be 11 digits)
     if (cleanPhone.length !== 11) {
-      alert('شماره تماس باید ۱۱ رقم باشد (مثال: 09123456789)');
+      showToast('شماره تماس باید ۱۱ رقم باشد (کیبورد در حالت انگلیسی باشد)', 'info');
       return;
     }
 
     setShowSenderForm(false);
     
     // Save current values to local variables to ensure they are captured correctly for the callback
-    const currentName = senderInfo.name;
+    const currentName = capturedName;
     const currentPhone = cleanPhone;
 
     if (pendingAction === 'share') {
       setTimeout(() => {
         handleTelegramInquiry(currentName, currentPhone);
         setPendingAction(null);
-      }, 150);
+      }, 200);
     }
   };
 
@@ -560,9 +565,12 @@ export const Store: React.FC = () => {
   const handleTelegramInquiry = async (nameOverride?: string, phoneOverride?: string) => {
     if (isSending) return;
     
-    // Explicitly prioritize overrides and ensure they are not empty
-    const currentName = (nameOverride && nameOverride.trim() !== '') ? nameOverride : (senderInfo.name.trim() !== '' ? senderInfo.name : 'نامشخص');
-    const currentPhone = (phoneOverride && phoneOverride.trim() !== '') ? phoneOverride : (senderInfo.phone.trim() !== '' ? senderInfo.phone : 'نامشخص');
+    // Force extraction and fallback for APK stability
+    const finalName = (nameOverride || senderInfo.name || '').trim();
+    const finalPhone = (phoneOverride || senderInfo.phone || '').trim();
+    
+    const currentName = finalName !== '' ? finalName : 'نامشخص';
+    const currentPhone = finalPhone !== '' ? finalPhone : 'نامشخص';
     
     setIsSending(true);
     
@@ -809,8 +817,9 @@ export const Store: React.FC = () => {
                     <label className="text-xs font-bold text-slate-500 mr-2">نام و نام خانوادگی</label>
                     <input 
                       required
+                      name="name"
                       type="text" 
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all font-bold"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all font-bold text-right"
                       placeholder="مثال: علی محمدی"
                       value={senderInfo.name}
                       onChange={(e) => setSenderInfo(prev => ({ ...prev, name: e.target.value }))}
@@ -820,19 +829,19 @@ export const Store: React.FC = () => {
                     <label className="text-xs font-bold text-slate-500 mr-2">شماره تماس</label>
                     <input 
                       required
+                      name="phone"
                       type="tel" 
                       dir="ltr"
                       maxLength={11}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all font-bold text-right"
                       placeholder="09123456789"
                       value={senderInfo.phone}
-                      inputMode="tel"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
                       onChange={(e) => {
                         const converted = p2e(e.target.value);
-                        const val = converted.replace(/[^0-9]/g, '');
-                        if (val.length <= 11) {
-                          setSenderInfo(prev => ({ ...prev, phone: val }));
-                        }
+                        const val = converted.replace(/[^0-9]/g, '').slice(0, 11);
+                        setSenderInfo(prev => ({ ...prev, phone: val }));
                       }}
                     />
                   </div>

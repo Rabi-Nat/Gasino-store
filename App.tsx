@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   Flame, 
   Calculator, 
@@ -9,7 +10,8 @@ import {
   Banknote, 
   MessageSquare,
   ChevronLeft,
-  Store as StoreIcon
+  Store as StoreIcon,
+  FlaskConical
 } from 'lucide-react';
 import { PipeCalculator } from './components/PipeCalculator';
 import { Ventilation } from './components/Ventilation';
@@ -19,8 +21,9 @@ import { ApplianceDistance } from './components/ApplianceDistance';
 import { PriceList } from './components/PriceList';
 import { ContactUs } from './components/ContactUs';
 import { Store } from './components/Store';
+import { GasTest } from './components/GasTest';
 
-type TabId = 'pipe' | 'ventilation' | 'meter' | 'valve' | 'safety' | 'price' | 'contact' | 'store';
+type TabId = 'pipe' | 'ventilation' | 'meter' | 'valve' | 'safety' | 'price' | 'contact' | 'store' | 'test';
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabId>('pipe');
@@ -37,10 +40,55 @@ const App: React.FC = () => {
     { id: 'meter' as TabId, label: 'مشخصات کنتور', icon: Gauge, component: MeterSpecs },
     { id: 'valve' as TabId, label: 'فواصل شیرآلات', icon: Ruler, component: ValveInstallation },
     { id: 'safety' as TabId, label: 'فواصل ایمنی', icon: ShieldCheck, component: ApplianceDistance },
-    { id: 'price' as TabId, label: 'تعرفه ۱۴۰۴', icon: Banknote, component: PriceList },
+    { id: 'price' as TabId, label: 'تعرفه ۱۴۰۵', icon: Banknote, component: PriceList },
     { id: 'store' as TabId, label: 'فروشگاه', icon: StoreIcon, component: Store },
+    { id: 'test' as TabId, label: 'تست', icon: FlaskConical, component: GasTest },
     { id: 'contact' as TabId, label: 'تماس با ما', icon: MessageSquare, component: ContactUs },
   ];
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [isInteracting, setIsInteracting] = useState(false);
+  const interactionTimer = useRef<NodeJS.Timeout | null>(null);
+
+  // Infinite Auto-scroll logic
+  useEffect(() => {
+    let animationFrame: number;
+    const scrollSpeed = 0.4; // Pixels per frame
+
+    const animate = () => {
+      if (!scrollRef.current || isInteracting) {
+        animationFrame = requestAnimationFrame(animate);
+        return;
+      }
+
+      const el = scrollRef.current;
+      el.scrollLeft -= scrollSpeed; // Scroll left-to-right (negative scrollLeft in RTL)
+
+      // Loop logic for RTL
+      // In RTL, scrollLeft 0 is far right. Negative values move left.
+      // We want to loop back when we've scrolled one full set.
+      if (Math.abs(el.scrollLeft) >= (el.scrollWidth / 2)) {
+        el.scrollLeft = 0;
+      }
+
+      animationFrame = requestAnimationFrame(animate);
+    };
+
+    animationFrame = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(animationFrame);
+  }, [isInteracting]);
+
+  const handleInteractionStart = () => {
+    setIsInteracting(true);
+    if (interactionTimer.current) clearTimeout(interactionTimer.current);
+  };
+
+  const handleInteractionEnd = () => {
+    // Resume auto-scroll after 3 seconds of inactivity
+    interactionTimer.current = setTimeout(() => {
+      setIsInteracting(false);
+    }, 3000);
+  };
 
   const ActiveComponent = tabs.find(t => t.id === activeTab)?.component || PipeCalculator;
   const activeLabel = tabs.find(t => t.id === activeTab)?.label || '';
@@ -115,19 +163,33 @@ const App: React.FC = () => {
         </div>
 
         {/* Mobile Bottom Navigation */}
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-2 py-2 flex justify-between items-center z-40 no-print">
-          <div className="flex w-full overflow-x-auto no-scrollbar gap-1">
-            {tabs.map((tab) => (
+        <nav 
+          className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 py-2 z-40 no-print"
+          onTouchStart={handleInteractionStart}
+          onTouchEnd={handleInteractionEnd}
+          onMouseDown={handleInteractionStart}
+          onMouseUp={handleInteractionEnd}
+        >
+          <div 
+            ref={scrollRef}
+            className="flex w-full overflow-x-auto no-scrollbar gap-1 px-2"
+            style={{ direction: 'rtl' }}
+          >
+            {/* Double the tabs for infinite loop effect */}
+            {[...tabs, ...tabs].map((tab, idx) => (
               <button
-                key={tab.id}
+                key={`${tab.id}-${idx}`}
                 onClick={() => setActiveTab(tab.id)}
                 className={`
-                  flex flex-col items-center justify-center min-w-[70px] py-1 transition-all duration-300 relative
+                  flex flex-col items-center justify-center min-w-[80px] py-1 transition-all duration-300 relative
                   ${activeTab === tab.id ? 'text-blue-600' : 'text-slate-400'}
                 `}
               >
-                {activeTab === tab.id && (
-                  <div className="absolute top-[-8px] w-5 h-1 bg-blue-600 rounded-full" />
+                {activeTab === tab.id && idx < tabs.length && (
+                  <motion.div 
+                    layoutId="activeTabMobile"
+                    className="absolute top-[-8px] w-5 h-1 bg-blue-600 rounded-full" 
+                  />
                 )}
                 <tab.icon className="w-6 h-6 mb-1" />
                 <span className="text-[9px] font-bold">

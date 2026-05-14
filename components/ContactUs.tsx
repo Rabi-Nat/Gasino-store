@@ -43,7 +43,7 @@ export const ContactUs: React.FC = () => {
                   <Mail className="w-7 h-7" />
                </div>
                <div className="flex flex-col text-right">
-                <span className="font-mono text-sm font-black text-slate-700 group-hover:text-blue-600 transition-colors ltr mb-2" dir="ltr">
+                <span className="font-mono text-base font-black text-slate-800 group-hover:text-blue-600 transition-colors ltr mb-1" dir="ltr">
                   {email}
                 </span>
                 <div className="flex items-center gap-2 justify-end">
@@ -67,6 +67,16 @@ export const ContactUs: React.FC = () => {
             </div>
             <ExternalLink className="w-5 h-5 text-slate-300 group-hover:text-blue-500 transition-all" />
           </a>
+
+          <div className="bg-white rounded-[2.5rem] p-8 border border-slate-200/60 shadow-sm flex items-center gap-6">
+            <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400">
+              <Mail className="w-7 h-7" />
+            </div>
+            <div className="flex flex-col gap-2 ltr" dir="ltr">
+              <span className="font-mono text-[13px] font-bold text-slate-500">Farid.sep@gmail.com</span>
+              <span className="font-mono text-[13px] font-bold text-slate-500">En.ebrahimnezhad@gmail.com</span>
+            </div>
+          </div>
       </div>
 
       <div className="flex flex-col items-center gap-4 py-8">

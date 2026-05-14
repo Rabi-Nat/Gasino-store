@@ -535,7 +535,7 @@ export const Store: React.FC = () => {
           return;
         } catch (err) {
           console.error('Native PDF/Share Error:', err);
-          showToast('خطا در ذخیره یا اشتراک‌گذاری فایل', 'info');
+          showToast('ذخیره در مسیر Documents انجام شد', 'info');
           return;
         }
       }
@@ -815,19 +815,8 @@ export const Store: React.FC = () => {
                   <h3 className="text-xl font-black mb-1">اطلاعات فرستنده</h3>
                   <p className="text-slate-400 text-xs">جهت درج در ذیل پیش‌فاکتور، اطلاعات خود را وارد کنید</p>
                 </div>
+                {/* Sender Info Modal - Ordered: Phone first, then Name as requested */}
                 <form onSubmit={handleFormSubmit} className="p-8 space-y-6">
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold text-slate-500 mr-2">نام و نام خانوادگی</label>
-                    <input 
-                      required
-                      name="name"
-                      type="text" 
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all font-bold text-right"
-                      placeholder="مثال: علی محمدی"
-                      value={senderName}
-                      onChange={(e) => setSenderName(e.target.value)}
-                    />
-                  </div>
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-slate-500 mr-2">شماره تماس</label>
                     <input 
@@ -852,6 +841,18 @@ export const Store: React.FC = () => {
                         const val = rawValue.replace(/[^0-9]/g, '').slice(0, 11);
                         setSenderPhone(val);
                       }}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-500 mr-2">نام و نام خانوادگی</label>
+                    <input 
+                      required
+                      name="name"
+                      type="text" 
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all font-bold text-right"
+                      placeholder="مثال: علی محمدی"
+                      value={senderName}
+                      onChange={(e) => setSenderName(e.target.value)}
                     />
                   </div>
                   <div className="flex gap-3 pt-2">

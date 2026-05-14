@@ -22,7 +22,8 @@ import {
   Plug2,
   Droplets,
   Download,
-  Share2
+  Share2,
+  Info
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import html2canvas from 'html2canvas';
@@ -366,22 +367,30 @@ export const Store: React.FC = () => {
   const [isSending, setIsSending] = useState(false);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'info' } | null>(null);
+  const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const showToast = (message: string, type: 'success' | 'info' = 'success') => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+    }
     setNotification({ message, type });
-    setTimeout(() => setNotification(null), 5000);
+    toastTimeoutRef.current = setTimeout(() => {
+      setNotification(null);
+      toastTimeoutRef.current = null;
+    }, 4000);
   };
-  const [senderInfo, setSenderInfo] = useState({ name: '', phone: '' });
+  const [senderName, setSenderName] = useState('');
+  const [senderPhone, setSenderPhone] = useState('');
   const [showSenderForm, setShowSenderForm] = useState(false);
   const [pendingAction, setPendingAction] = useState<'save' | 'share' | null>(null);
   const invoiceRef = useRef<HTMLDivElement>(null);
 
   const handleActionWithInfo = (action: 'share') => {
-    if (!senderInfo.name || !senderInfo.phone) {
+    if (!senderName || !senderPhone) {
       setPendingAction(action);
       setShowSenderForm(true);
     } else {
-      handleTelegramInquiry(senderInfo.name, senderInfo.phone);
+      handleTelegramInquiry(senderName, senderPhone);
     }
   };
 
@@ -390,8 +399,8 @@ export const Store: React.FC = () => {
     
     // Fallback capture from form directly in case state is stale on some Android devices
     const formData = new FormData(e.currentTarget);
-    const capturedName = formData.get('name') as string || senderInfo.name;
-    const capturedPhone = formData.get('phone') as string || senderInfo.phone;
+    const capturedName = formData.get('name') as string || senderName;
+    const capturedPhone = formData.get('phone') as string || senderPhone;
     
     const cleanPhone = (capturedPhone || '').replace(/[^0-9]/g, '');
 
@@ -497,40 +506,37 @@ export const Store: React.FC = () => {
         const pdfBase64 = pdf.output('datauristring').split(',')[1];
         
         try {
-          // Attempt to write to Documents which is more visible to users than Cache
-          const result = await Filesystem.writeFile({
-            path: fileName,
-            data: pdfBase64,
-            directory: Directory.Documents,
-          });
-
-          await Share.share({
-            title: 'پیش‌فاکتور ملزومات گاز',
-            text: 'فایل پیش‌فاکتور ملزومات گاز با موفقیت ایجاد شد.',
-            url: result.uri,
-            dialogTitle: 'ارسال یا ذخیره پیش‌فاکتور',
-          });
-
-          showToast('فایل در پوشه Documents ذخیره شد و آماده اشتراک‌گذاری است');
-          return;
-        } catch (nativeErr) {
-          console.error('Native PDF Error:', nativeErr);
-          // Retry with Cache if Documents fails (sometimes permissions vary)
+          // Attempt to write to Documents
+          let result;
           try {
-            const cacheResult = await Filesystem.writeFile({
+            result = await Filesystem.writeFile({
+              path: fileName,
+              data: pdfBase64,
+              directory: Directory.Documents,
+            });
+          } catch (writeErr) {
+            // Fallback to Cache if Documents fails
+            result = await Filesystem.writeFile({
               path: fileName,
               data: pdfBase64,
               directory: Directory.Cache,
             });
-            await Share.share({
-              url: cacheResult.uri,
-              title: 'پیش‌فاکتور ملزومات گاز',
-            });
-            showToast('آماده اشتراک‌گذاری یا ذخیره');
-            return;
-          } catch (cacheErr) {
-            console.error('Cache fallback failed:', cacheErr);
           }
+
+          // Share once
+          await Share.share({
+            title: 'پیش‌فاکتور ملزومات گاز',
+            text: 'فایل پیش‌فاکتور ملزومات گاز آماده شد.',
+            url: result.uri,
+            dialogTitle: 'ارسال یا ذخیره پیش‌فاکتور',
+          });
+
+          showToast('فایل با موفقیت ایجاد و آماده اشتراک‌گذاری شد');
+          return;
+        } catch (err) {
+          console.error('Native PDF/Share Error:', err);
+          showToast('خطا در ذخیره یا اشتراک‌گذاری فایل', 'info');
+          return;
         }
       }
 
@@ -563,8 +569,8 @@ export const Store: React.FC = () => {
     if (isSending) return;
     
     // Force extraction and fallback for APK stability
-    const finalName = (nameOverride || senderInfo.name || '').trim();
-    const finalPhone = (phoneOverride || senderInfo.phone || '').trim();
+    const finalName = (nameOverride || senderName || '').trim();
+    const finalPhone = (phoneOverride || senderPhone || '').trim();
     
     const currentName = finalName !== '' ? finalName : 'نامشخص';
     const currentPhone = finalPhone !== '' ? finalPhone : 'نامشخص';
@@ -679,10 +685,10 @@ export const Store: React.FC = () => {
               <h2 className="text-2xl font-black mb-1">پیش‌فاکتور ملزومات گاز</h2>
               <div className="flex flex-col gap-1">
                 <p className="text-blue-100 text-sm">لیست برآوردی پروژه بر اساس استعلام کاربر</p>
-                {senderInfo.name && (
+                {senderName && (
                   <div className="flex items-center gap-4 mt-2 bg-white/10 p-2 rounded-lg text-xs">
-                    <span>فرستنده: <span className="font-bold">{senderInfo.name}</span></span>
-                    <span>شماره تماس: <span className="font-bold">{senderInfo.phone}</span></span>
+                    <span>فرستنده: <span className="font-bold">{senderName}</span></span>
+                    <span>شماره تماس: <span className="font-bold">{senderPhone}</span></span>
                   </div>
                 )}
               </div>
@@ -746,7 +752,7 @@ export const Store: React.FC = () => {
               ) : (
                 <FileText className="w-5 h-5" />
               )}
-              {isGeneratingPDF ? 'در حال ایجاد...' : 'چاپ / ذخیره PDF'}
+              {isGeneratingPDF ? 'در حال ایجاد...' : 'ذخیره و ارسال PDF'}
             </button>
             
             <button 
@@ -768,15 +774,15 @@ export const Store: React.FC = () => {
         <AnimatePresence>
           {notification && (
               <motion.div 
-                  initial={{ opacity: 0, y: 50, scale: 0.9 }}
+                  initial={{ opacity: 0, y: -50, scale: 0.9 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 50, scale: 0.9 }}
-                  className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[9999] w-[90%] max-w-md"
+                  exit={{ opacity: 0, y: -50, scale: 0.9 }}
+                  className="fixed top-10 left-1/2 -translate-x-1/2 z-[9999] w-[90%] max-w-md"
               >
                   <div className={`flex items-center gap-3 p-4 rounded-2xl shadow-2xl border ${
                       notification.type === 'success' 
                       ? 'bg-green-600 border-green-500 text-white' 
-                      : 'bg-blue-600 border-blue-500 text-white'
+                      : 'bg-amber-600 border-amber-500 text-white shadow-amber-200/50'
                   }`}>
                       {notification.type === 'success' ? (
                           <div className="bg-white/20 p-1.5 rounded-full">
@@ -784,7 +790,7 @@ export const Store: React.FC = () => {
                           </div>
                       ) : (
                           <div className="bg-white/20 p-1.5 rounded-full animate-pulse">
-                              <FileText className="w-5 h-5" />
+                              <Info className="w-5 h-5" />
                           </div>
                       )}
                       <p className="font-bold text-sm md:text-base leading-relaxed">
@@ -818,8 +824,8 @@ export const Store: React.FC = () => {
                       type="text" 
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all font-bold text-right"
                       placeholder="مثال: علی محمدی"
-                      value={senderInfo.name}
-                      onChange={(e) => setSenderInfo(prev => ({ ...prev, name: e.target.value }))}
+                      value={senderName}
+                      onChange={(e) => setSenderName(e.target.value)}
                     />
                   </div>
                   <div className="space-y-2">
@@ -832,7 +838,7 @@ export const Store: React.FC = () => {
                       maxLength={11}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 focus:ring-2 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all font-bold text-right"
                       placeholder="09123456789"
-                      value={senderInfo.phone}
+                      value={senderPhone}
                       inputMode="numeric"
                       pattern="[0-9]*"
                       onChange={(e) => {
@@ -844,7 +850,7 @@ export const Store: React.FC = () => {
                         
                         // Strictly allow only English digits
                         const val = rawValue.replace(/[^0-9]/g, '').slice(0, 11);
-                        setSenderInfo(prev => ({ ...prev, phone: val }));
+                        setSenderPhone(val);
                       }}
                     />
                   </div>

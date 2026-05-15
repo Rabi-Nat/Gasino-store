@@ -37,7 +37,7 @@ const App: React.FC = () => {
   const tabs = [
     { id: 'pipe' as TabId, label: 'سایز لوله‌کشی', icon: Calculator, component: PipeCalculator },
     { id: 'ventilation' as TabId, label: 'تهویه و دریچه', icon: Wind, component: Ventilation },
-    { id: 'meter' as TabId, label: 'مشخصات کنتور', icon: Gauge, component: MeterSpecs },
+    { id: 'meter' as TabId, label: 'کنتور', icon: Gauge, component: MeterSpecs },
     { id: 'valve' as TabId, label: 'فواصل شیرآلات', icon: Ruler, component: ValveInstallation },
     { id: 'safety' as TabId, label: 'فواصل ایمنی', icon: ShieldCheck, component: ApplianceDistance },
     { id: 'price' as TabId, label: 'تعرفه ۱۴۰۵', icon: Banknote, component: PriceList },

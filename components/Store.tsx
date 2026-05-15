@@ -432,6 +432,8 @@ export const Store: React.FC = () => {
     
     try {
       const element = invoiceRef.current;
+      const width = element.offsetWidth;
+      const height = element.offsetHeight;
       
       // Small delay to ensure layout
       await new Promise(resolve => setTimeout(resolve, 300));
@@ -441,6 +443,11 @@ export const Store: React.FC = () => {
         useCORS: true,
         logging: false,
         backgroundColor: '#ffffff',
+        width: width,
+        height: height,
+        windowWidth: document.documentElement.offsetWidth,
+        windowHeight: document.documentElement.offsetHeight,
+        scrollY: -window.scrollY, // Fix for capturing elements inside scrollable containers
         onclone: (clonedDoc) => {
           const el = clonedDoc.getElementById('invoice-capture-area');
           if (el) {
@@ -493,11 +500,25 @@ export const Store: React.FC = () => {
         format: 'a4'
       });
       
-      const imgProps = pdf.getImageProperties(imgData);
       const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      const pdfPageHeight = pdf.internal.pageSize.getHeight();
+      const imgProps = pdf.getImageProperties(imgData);
+      const imgHeight = (imgProps.height * pdfWidth) / imgProps.width;
       
-      pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      // Add the first page
+      pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight);
+      heightLeft -= pdfPageHeight;
+
+      // Add more pages if content is longer than one page
+      while (heightLeft > 0) {
+        position = (heightLeft - imgHeight); // Position of the image for the next page
+        pdf.addPage();
+        pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, imgHeight);
+        heightLeft -= pdfPageHeight;
+      }
       
       const fileName = `gasino-invoice-${new Date().getTime()}.pdf`;
 

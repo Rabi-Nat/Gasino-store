@@ -175,6 +175,10 @@ const PRODUCTS: Product[] = [
   { id: 'v-2', name: 'شیر ۲ اینچ گازی', unit: 'piece', category: 'valve' },
   { id: 'v-212', name: 'شیر ۲ ۱/۲ اینچ گازی', unit: 'piece', category: 'valve' },
   { id: 'v-3', name: 'شیر ۳ اینچ گازی', unit: 'piece', category: 'valve' },
+  { id: 'vl-1', name: 'شیر قفلی ۱ اینچ', unit: 'piece', category: 'valve' },
+  { id: 'vl-112', name: 'شیر قفلی ۱ ۱/۲ اینچ', unit: 'piece', category: 'valve' },
+  { id: 'vl-2', name: 'شیر قفلی ۲ اینچ', unit: 'piece', category: 'valve' },
+  { id: 'vl-212', name: 'شیر قفلی ۲ ۱/۲ اینچ', unit: 'piece', category: 'valve' },
   
   // Threaded Ends (سردنده) - Maniseman
   { id: 'ni-12-ms', name: 'سردنده ۱/۲ اینچ مانیسمان', unit: 'piece', category: 'nipple' },

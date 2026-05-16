@@ -41,6 +41,9 @@ jobs:
           distribution: temurin
           java-version: 21
 
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
       - name: Decode Keystore
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/release-key.jks
